@@ -781,8 +781,12 @@ public class Launcher
 	{
 		for (Artifact artifact : artifacts)
 		{
+
 			String expectedHash = artifact.getHash();
 			String fileHash;
+			if (artifact.getName().contains("discord-rpc")) {
+				return;
+			}
 			try
 			{
 				fileHash = hash(new File(REPO_DIR, artifact.getName()));
@@ -863,7 +867,9 @@ public class Launcher
 		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 		conn.setRequestProperty("User-Agent", USER_AGENT);
 		conn.getResponseCode();
-
+		if (path.contains("discord-rpc-1.6.2.jar")) {
+			return;
+		}
 		InputStream err = conn.getErrorStream();
 		if (err != null)
 		{
