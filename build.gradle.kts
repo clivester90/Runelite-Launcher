@@ -47,8 +47,6 @@ dependencies {
     implementation(libs.net.sf.jopt.simple.jopt.simple)
     implementation(libs.com.google.code.gson.gson)
     implementation(libs.com.google.guava.guava) {
-        // compile time annotations for static analysis in Guava
-        // https://github.com/google/guava/wiki/UseGuavaInYourBuild#what-about-guavas-own-dependencies
         exclude(group = "com.google.code.findbugs", module = "jsr305")
         exclude(group = "com.google.errorprone", module = "error_prone_annotations")
         exclude(group = "com.google.j2objc", module = "j2objc-annotations")
@@ -67,51 +65,53 @@ tasks.withType<JavaCompile> {
     targetCompatibility = "1.8"
 }
 
-
 tasks.withType<AbstractArchiveTask>().configureEach {
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
 }
 
+val exportFile = file("build/exported-app-name.properties")
+
+tasks.register("exportAppNameManually") {
+    doLast {
+        val appName = project.findProperty("finalName") as? String ?: "RuneLite"
+        val lowerName = project.findProperty("lowerName") as? String ?: appName.lowercase(Locale.getDefault())
+
+        println("Exporting app names:")
+        println("  FINAL_NAME = $appName")
+        println("  LOWER_NAME = $lowerName")
+
+        System.getenv("GITHUB_ENV")?.let { envPath ->
+            file(envPath).appendText("GRADLE_APP_NAME=$appName\n")
+            file(envPath).appendText("GRADLE_APP_NAME_LOWER=$lowerName\n")
+        }
+
+        exportFile.writeText("finalName=$appName\nlowerName=$lowerName\n")
+        println("Exported properties to: ${exportFile.absolutePath}")
+    }
+}
+
+
+val exportedProps = Properties().apply {
+    if (exportFile.exists()) {
+        load(exportFile.reader())
+    }
+}
+val finalNameGlobal = exportedProps.getProperty("finalName") ?: "RuneLite"
+val lowerNameGlobal = exportedProps.getProperty("lowerName") ?: finalNameGlobal.lowercase(Locale.getDefault())
+
 tasks {
     processResources {
-        // Match both .properties and .xml files
         filesMatching(listOf("**/*.properties", "**/*.xml")) {
             val props = arrayOf(
                 "user" to System.getProperty("user.home"),
-                "lowerName" to project.extra["lowerName"] as String,
+                "lowerName" to lowerNameGlobal,
                 "runelite_net" to project.extra["website"] as String,
                 "runelite_128" to "runelite_128.png",
                 "runelite_splash" to "runelite_splash.png"
             )
-            expand(
-                "project" to project,
-                *props
-            )
+            expand("project" to project, *props)
         }
-    }
-}
-
-tasks.register("exportAppName") {
-    doLast {
-        val propsFile = rootProject.file("gradle.properties")
-        require(propsFile.exists())
-
-        val text = propsFile.readText(StandardCharsets.UTF_8).removePrefix("\uFEFF")
-
-        val props = Properties()
-        props.load(text.reader())
-
-        val appName = props.getProperty("finalName")
-            ?: error("finalName not found")
-
-        val lowerName = props.getProperty("lowerName")
-            ?: error("lowerName not found")
-
-        val envFile = System.getenv("GITHUB_ENV")
-
-        file(envFile).appendText("GRADLE_APP_NAME=$appName\n")
-        file(envFile).appendText("GRADLE_APP_NAME_LOWER=$lowerName\n")
     }
 }
 
@@ -124,17 +124,10 @@ tasks.register<Copy>("filterAppimage") {
 tasks.register<Copy>("filterInnosetup") {
     from("innosetup") {
         include("*.iss")
-        // First expand tokens like ${project.finalName}
-        expand("project" to project) {
-            escapeBackslash = true
-        }
-
-        filter { line ->
-            line.replace(
-                "${'$'}{project.finalName}",
-                "\\${project.extra["finalName"]}"
-            )
-        }
+        expand(
+            "finalName" to finalNameGlobal,
+            "lowerName" to lowerNameGlobal
+        )
     }
     into("build/filtered-resources")
 }
@@ -143,10 +136,7 @@ tasks.register<Copy>("filterPackr") {
     from("packr") {
         include("*.json")
         filter { line ->
-            line.replace(
-                "RuneLite.jar",
-                "${project.extra["finalName"]}.jar"
-            )
+            line.replace("RuneLite.jar", "$finalNameGlobal.jar")
         }
     }
     into("build/packr")
@@ -155,21 +145,16 @@ tasks.register<Copy>("filterPackr") {
 tasks.register<Copy>("filterInnosetupPas") {
     from("innosetup") {
         include("*.pas")
-
         filter { line ->
-            line.replace("\${project.finalName_upper}",
-                project.extra["finalName"].toString().uppercase(Locale.getDefault())
-            ).replace("{project.finalName}", project.extra["finalName"].toString())
+            line.replace("\${project.finalName_upper}", finalNameGlobal.uppercase(Locale.getDefault()))
+                .replace("{project.finalName}", finalNameGlobal)
         }
     }
     into("build/filtered-resources")
 }
 
 tasks.register<Copy>("copyInstallerScripts") {
-    from("innosetup") {
-        include("*.pas")
-    }
-    // not really filtered, but need to be put next to the filtered installer scripts so they can pick them up
+    from("innosetup") { include("*.pas") }
     into("build/filtered-resources")
 }
 
@@ -181,15 +166,20 @@ tasks.register<Copy>("filterOsx") {
 
 tasks.shadowJar {
     from(sourceSets.main.get().output)
-    minimize {
-        exclude(dependency("ch.qos.logback:.*:.*"))
-    }
-    archiveFileName.set(project.findProperty("finalName") as String + ".jar")
-    manifest {
-        attributes("Main-Class" to "net.runelite.launcher.Launcher")
-    }
+    minimize { exclude(dependency("ch.qos.logback:.*:.*")) }
+    archiveFileName.set("$finalNameGlobal.jar")
+    manifest { attributes("Main-Class" to "net.runelite.launcher.Launcher") }
 }
 
 tasks.named("build") {
-    dependsOn("filterAppimage", "filterInnosetup", "filterInnosetupPas", "filterPackr" , "copyInstallerScripts", "filterOsx", tasks.shadowJar)
+    dependsOn(
+        "exportAppNameManually",
+        "filterAppimage",
+        "filterInnosetup",
+        "filterInnosetupPas",
+        "filterPackr",
+        "copyInstallerScripts",
+        "filterOsx",
+        tasks.shadowJar
+    )
 }
