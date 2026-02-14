@@ -81,11 +81,16 @@ tasks.register("exportAppNameManually") {
         println("  FINAL_NAME = $appName")
         println("  LOWER_NAME = $lowerName")
 
+        // Ensure build folder exists
+        exportFile.parentFile.mkdirs()
+
+        // Write to GitHub Actions env if available
         System.getenv("GITHUB_ENV")?.let { envPath ->
             file(envPath).appendText("GRADLE_APP_NAME=$appName\n")
             file(envPath).appendText("GRADLE_APP_NAME_LOWER=$lowerName\n")
         }
 
+        // Write to manual properties file
         exportFile.writeText("finalName=$appName\nlowerName=$lowerName\n")
         println("Exported properties to: ${exportFile.absolutePath}")
     }
