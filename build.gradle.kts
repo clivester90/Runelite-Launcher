@@ -111,6 +111,7 @@ tasks {
             val props = arrayOf(
                 "user" to System.getProperty("user.home"),
                 "lowerName" to lowerNameGlobal,
+                "finalName" to finalNameGlobal,
                 "runelite_net" to project.extra["website"] as String,
                 "runelite_128" to "runelite_128.png",
                 "runelite_splash" to "runelite_splash.png"
