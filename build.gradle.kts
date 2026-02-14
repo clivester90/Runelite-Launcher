@@ -1,4 +1,5 @@
 import org.apache.tools.ant.filters.ReplaceTokens
+import java.nio.charset.StandardCharsets
 import java.util.*
 
 /*
@@ -93,8 +94,20 @@ tasks {
 
 tasks.register("exportAppName") {
     doLast {
-        val appName = project.extra["finalName"] as String
-        val lowerName = project.extra["lowerName"] as String
+        val propsFile = rootProject.file("gradle.properties")
+        require(propsFile.exists())
+
+        val text = propsFile.readText(StandardCharsets.UTF_8).removePrefix("\uFEFF")
+
+        val props = Properties()
+        props.load(text.reader())
+
+        val appName = props.getProperty("finalName")
+            ?: error("finalName not found")
+
+        val lowerName = props.getProperty("lowerName")
+            ?: error("lowerName not found")
+
         val envFile = System.getenv("GITHUB_ENV")
 
         file(envFile).appendText("GRADLE_APP_NAME=$appName\n")
