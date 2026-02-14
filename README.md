@@ -1,4 +1,4 @@
-![](https://runelite.net/img/logo.png)
+![](https://runelite.net/img/logo.png) 
 # launcher [![Discord](https://img.shields.io/discord/301497432909414422.svg)](https://discord.gg/mePCs8U)
 
 This repository holds the launcher for the [RuneLite client](https://github.com/runelite/runelite).
